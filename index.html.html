@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>제주 연안 갯녹음 AI 모니터링 플랫폼</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet Map CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Pretendard', sans-serif;
+        }
+        /* Custom map pointer pulse styling based on risk levels */
+        .pulse-marker-normal {
+            border: 2px solid #10B981;
+            background-color: rgba(16, 185, 129, 0.45);
+            border-radius: 9999px;
+            animation: pulse-green 2s infinite;
+        }
+        .pulse-marker-progressing {
+            border: 2px solid #F59E0B;
+            background-color: rgba(245, 158, 11, 0.45);
+            border-radius: 9999px;
+            animation: pulse-orange 2s infinite;
+        }
+        .pulse-marker-severe {
+            border: 2px solid #EF4444;
+            background-color: rgba(239, 68, 68, 0.45);
+            border-radius: 9999px;
+            animation: pulse-red 2s infinite;
+        }
+        
+        @keyframes pulse-green {
+            0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        @keyframes pulse-orange {
+            0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+            100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        }
+        @keyframes pulse-red {
+            0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+            100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col selection:bg-cyan-500 selection:text-slate-900">
+
+    <!-- Header & Navigation Bar -->
+    <header class="border-b border-slate-800 bg-slate-950 sticky top-0 z-50 transition-all">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row items-center justify-between py-4 gap-4">
+                
+                <!-- Logo -->
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-gradient-to-tr from-cyan-600 to-blue-500 rounded-xl shadow-lg shadow-cyan-500/10">
+                        <i class="fa-solid fa-water-wave text-white text-xl animate-pulse">🌊</i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent">
+                            제주 갯녹음 AI 모니터링 시스템
+                        </h1>
+                        <p class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Jeju Coastal Ecoguard Platform</p>
+                    </div>
+                </div>
+
+                <!-- Tabs Menu (여러 탭 구성) -->
+                <nav class="flex items-center bg-slate-900/80 p-1.5 rounded-xl border border-slate-800 gap-1">
+                    <button onclick="switchTab('tab-home')" id="btn-tab-home" class="tab-btn px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-cyan-400 bg-slate-800/80">
+                        <i class="fa-solid fa-house mr-1.5"></i>홈
+                    </button>
+                    <button onclick="switchTab('tab-issue')" id="btn-tab-issue" class="tab-btn px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-slate-400 hover:text-slate-200">
+                        <i class="fa-solid fa-circle-exclamation mr-1.5"></i>갯녹음이란?
+                    </button>
+                    <button onclick="switchTab('tab-source')" id="btn-tab-source" class="tab-btn px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-slate-400 hover:text-slate-200">
+                        <i class="fa-solid fa-database mr-1.5"></i>예측원리 & 출처
+                    </button>
+                    <button onclick="switchTab('tab-monitor')" id="btn-tab-monitor" class="tab-btn px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-slate-400 hover:text-slate-200 flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                        <i class="fa-solid fa-chart-line"></i>실시간 AI 모니터링
+                    </button>
+                </nav>
+
+            </div>
+        </div>
+    </header>
+
+    <!-- 1단계: 홈 탭 콘텐츠 -->
+    <section id="tab-home" class="tab-content max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col gap-8">
+        
+        <!-- Hero Banner -->
+        <div class="p-8 sm:p-12 rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-slate-800 relative overflow-hidden flex flex-col gap-4 shadow-2xl">
+            <div class="absolute -right-16 -top-16 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl"></div>
+            <div class="absolute -left-16 -bottom-16 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl"></div>
+            
+            <span class="px-3 py-1 bg-cyan-500/10 text-cyan-400 text-xs font-bold rounded-full border border-cyan-500/20 self-start">제주 해양환경 분석 혁신</span>
+            <h2 class="text-3xl sm:text-4xl font-extrabold text-white leading-tight">
+                AI와 공공 OpenAPI가 만나<br>
+                제주 바다숲을 복원합니다.
+            </h2>
+            <p class="text-slate-400 text-sm sm:text-base max-w-2xl leading-relaxed">
+                바다 사막화라 불리는 '갯녹음(백화현상)'은 제주 수산 경쟁력을 무너뜨리는 심각한 생태적 문제입니다. 본 시스템은 과거 정밀 조사 데이터와 국립수산과학원의 OpenAPI 실측 수치를 고성능 Ridge 기계학습 모델로 실시간 분석하여 위험 수역을 탐지합니다.
+            </p>
+            <div class="flex flex-wrap gap-4 mt-2 z-10">
+                <button onclick="switchTab('tab-monitor')" class="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-cyan-500/10 active:scale-95">
+                    실시간 AI 지도 분석하기 <i class="fa-solid fa-arrow-right ml-1"></i>
+                </button>
+                <button onclick="switchTab('tab-issue')" class="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-sm transition-all border border-slate-700">
+                    갯녹음 위험요소 자세히 보기
+                </button>
+            </div>
+        </div>
+
+        <!-- Key Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="p-6 bg-slate-950/40 border border-slate-800 rounded-2xl flex items-start gap-4">
+                <div class="p-3 bg-red-500/10 text-red-400 rounded-xl border border-red-500/20 text-lg"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                <div>
+                    <h4 class="text-sm font-bold text-slate-300 mb-1">식별된 모니터링 관측소</h4>
+                    <p class="text-2xl font-black text-white">22개 정점</p>
+                    <p class="text-[11px] text-slate-500 mt-1">제주, 한림, 대정, 조천, 서귀포, 표선, 성산</p>
+                </div>
+            </div>
+            <div class="p-6 bg-slate-950/40 border border-slate-800 rounded-2xl flex items-start gap-4">
+                <div class="p-3 bg-cyan-500/10 text-cyan-400 rounded-xl border border-cyan-500/20 text-lg"><i class="fa-solid fa-satellite-dish"></i></div>
+                <div>
+                    <h4 class="text-sm font-bold text-slate-300 mb-1">데이터 분석 연동 방식</h4>
+                    <p class="text-2xl font-black text-white">실시간 NIFS OpenAPI</p>
+                    <p class="text-[11px] text-slate-500 mt-1">매월/격월 실제 해양정밀관측 정기 조사일 연동</p>
+                </div>
+            </div>
+            <div class="p-6 bg-slate-950/40 border border-slate-800 rounded-2xl flex items-start gap-4">
+                <div class="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20 text-lg"><i class="fa-solid fa-leaf"></i></div>
+                <div>
+                    <h4 class="text-sm font-bold text-slate-300 mb-1">생태계 복구 솔루션</h4>
+                    <p class="text-2xl font-black text-white">원인 부합형 설계</p>
+                    <p class="text-[11px] text-slate-500 mt-1">수온, 염분, DO, pH 매칭 맞춤식 수중 처방</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Jeju Algae Forest Infographic -->
+        <div class="bg-slate-950/20 border border-slate-800 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row gap-8 items-center">
+            <div class="w-full md:w-1/2 space-y-4">
+                <span class="px-2 py-1 bg-amber-500/10 text-amber-400 text-[10px] font-bold rounded border border-amber-500/20">사태의 심각성</span>
+                <h3 class="text-xl sm:text-2xl font-bold text-white">사라져 가는 제주 연안 바다숲, 황폐화 실태</h3>
+                <p class="text-slate-400 text-xs sm:text-sm leading-relaxed">
+                    조간대 바위 표면이 하얗게 변하는 현상을 뜻하는 갯녹음은 감태, 모자반 등 토착 갈조류가 고사하여 소멸하고 그 자리를 탄산칼슘 골격을 지닌 단단한 무절석회조류가 바위를 코팅하듯 뒤덮는 현상입니다. 
+                </p>
+                <p class="text-slate-400 text-xs sm:text-sm leading-relaxed">
+                    이로 인해 조개류와 전복, 소라 및 어류가 서식처와 산란처를 완전히 빼앗겨 어업 생산성이 크게 퇴보하게 되므로, AI의 사전 감지와 화학적 원인 분석에 따른 수중 생태 엔지니어링 개입이 절실합니다.
+                </p>
+            </div>
+            <div class="w-full md:w-1/2 grid grid-cols-2 gap-4">
+                <div class="p-4 bg-slate-900/60 rounded-2xl border border-slate-800/80 text-center">
+                    <span class="text-3xl block mb-2">🌿</span>
+                    <h5 class="text-xs font-bold text-slate-400 mb-1">건강한 연안 바다숲</h5>
+                    <p class="text-emerald-400 font-extrabold text-sm">연질 해조류 피도 60%↑</p>
+                </div>
+                <div class="p-4 bg-slate-900/60 rounded-2xl border border-slate-800/80 text-center">
+                    <span class="text-3xl block mb-2">💀</span>
+                    <h5 class="text-xs font-bold text-slate-400 mb-1">사막화(갯녹음 수역)</h5>
+                    <p class="text-red-400 font-extrabold text-sm">석회조류 피도 70%↑</p>
+                </div>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- 2단계: 갯녹음 이념과 요인 상세 설명 탭 -->
+    <section id="tab-issue" class="tab-content max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 hidden flex flex-col gap-8">
+        
+        <div class="text-center max-w-3xl mx-auto space-y-3">
+            <span class="px-3 py-1 bg-red-500/10 text-red-400 text-xs font-bold rounded-full border border-red-500/20">바다의 사막화</span>
+            <h2 class="text-3xl font-extrabold text-white">갯녹음 발생 원인과 생태적 파괴 원리</h2>
+            <p class="text-slate-400 text-sm leading-relaxed">
+                해양 환경 변화의 물리·화학적 수치 요동이 어떻게 연안 해조류 군락을 위협하고 석회화하는지 설명합니다.
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <!-- 1. 수온 -->
+            <div class="bg-slate-950/40 border border-slate-800 p-6 rounded-2xl flex flex-col gap-3 shadow-xl">
+                <div class="flex items-center gap-3">
+                    <span class="p-3 bg-red-500/10 text-red-400 border border-red-500/20 text-lg rounded-xl">🌡️</span>
+                    <h3 class="text-lg font-bold text-white">수온 (Sea Temperature)의 파괴 메커니즘</h3>
+                </div>
+                <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                    대형 갈조류(감태, 모자반, 대황 등)는 풍부한 영양염류와 적절한 저온 해수 환경을 요구하는 한계 성장 수온을 가집니다. 
+                </p>
+                <div class="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-400 leading-relaxed">
+                    📍 <b class="text-slate-200">영향 분석:</b> 온난화로 바다 온도가 한계 수온 이상으로 장기간 급상승하면 해조 엽체의 신진대사가 차단되어 흐늘흐늘하게 녹아내립니다. 이 기회를 틈타 높은 수온에 매우 강한 저항성을 갖는 유무절석회조류 포자가 바위 표면에 침착하여 칼슘 막을 빠르게 형성하기 시작합니다.
+                </div>
+            </div>
+
+            <!-- 2. 염분 -->
+            <div class="bg-slate-950/40 border border-slate-800 p-6 rounded-2xl flex flex-col gap-3 shadow-xl">
+                <div class="flex items-center gap-3">
+                    <span class="p-3 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-lg rounded-xl">💧</span>
+                    <h3 class="text-lg font-bold text-white">염분 (Salinity)의 삼투압 장애 원리</h3>
+                </div>
+                <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                    연안 해조류는 세포벽의 안전을 위해 일정한 염분 농도(보통 32~34.5 psu) 균형 아래에서만 정상적인 삼투 대사를 이행합니다.
+                </p>
+                <div class="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-400 leading-relaxed">
+                    📍 <b class="text-slate-200">영향 분석:</b> 제주도는 지형 특성상 육상의 담수가 땅속으로 스며든 후 바다 밑바닥에서 분출되는 '지하 용천수' 배출량이 매우 많습니다. 집중호우나 국소 저염분수 유입으로 염분이 낮아지면, 대형 해조류의 성장세가 크게 저해되는 반면 골격을 지닌 석회조류가 공간 우위를 점하게 됩니다.
+                </div>
+            </div>
+
+            <!-- 3. 용존산소 -->
+            <div class="bg-slate-950/40 border border-slate-800 p-6 rounded-2xl flex flex-col gap-3 shadow-xl">
+                <div class="flex items-center gap-3">
+                    <span class="p-3 bg-blue-500/10 text-blue-400 border border-blue-500/20 text-lg rounded-xl">🌬️</span>
+                    <h3 class="text-lg font-bold text-white">용존산소 (DO) 고갈과 슬러지 정체 효과</h3>
+                </div>
+                <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                    산소 포화도는 수중 생물의 야간 호흡 대사와 암반 부근 유기 퇴적물의 산화 분해 속도를 지배하는 척도입니다.
+                </p>
+                <div class="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-400 leading-relaxed">
+                    📍 <b class="text-slate-200">영향 분석:</b> 연안 부영양화로 슬러지가 바위 표면을 뒤덮고 수류 정체로 저층수의 용존산소가 급감하면 빈산소수괴 상태가 조성됩니다. 이 경우 해조류 세포의 생식이 전면 차단되며, 갯녹음 유발 암반의 물리적 확장이 수월해집니다.
+                </div>
+            </div>
+
+            <!-- 4. pH -->
+            <div class="bg-slate-950/40 border border-slate-800 p-6 rounded-2xl flex flex-col gap-3 shadow-xl">
+                <div class="flex items-center gap-3">
+                    <span class="p-3 bg-purple-500/10 text-purple-400 border border-purple-500/20 text-lg rounded-xl">🧪</span>
+                    <h3 class="text-lg font-bold text-white">pH 수소이온농도와 산성화 위기</h3>
+                </div>
+                <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                    안정적인 바다 해수는 보통 미세 알칼리성(pH 8.1~8.2)을 띠고 있어 유용 해양 식물의 칼슘 저항 균형을 지원합니다.
+                </p>
+                <div class="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-400 leading-relaxed">
+                    📍 <b class="text-slate-200">영향 분석:</b> Co2 증가로 해양 산성화가 빠르게 진행되어 바다 pH 균형이 깨지면 성게, 소라 등 해조류의 싹을 무차별 포식하는 조식 동물이 기형적으로 폭발 번식합니다. 이들이 갈조류 싹을 완전히 갉아먹는 '식해 활동'을 가속하여 바위가 완전 황폐화되는 계기가 됩니다.
+                </div>
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- 3단계: 예측 모델 & OpenAPI 수집출처 설명 탭 -->
+    <section id="tab-source" class="tab-content max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 hidden flex flex-col gap-8">
+        
+        <div class="text-center max-w-3xl mx-auto space-y-3">
+            <span class="px-3 py-1 bg-cyan-500/10 text-cyan-400 text-xs font-bold rounded-full border border-cyan-500/20">작동 메커니즘</span>
+            <h2 class="text-3xl font-extrabold text-white">OpenAPI 수집 체계 및 AI 예측 공정</h2>
+            <p class="text-slate-400 text-sm leading-relaxed">
+                공공 해양 인프라 수집망의 센싱 수치가 인공지능 Ridge 예측 모델에 투입되는 플로우차트와 출처를 규명합니다.
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- OpenAPI 수집 출처 -->
+            <div class="bg-slate-950/40 border border-slate-800 p-6 rounded-2xl flex flex-col gap-4 shadow-xl lg:col-span-1">
+                <h3 class="text-md font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-2">
+                    <i class="fa-solid fa-cloud-arrow-down text-cyan-400"></i>
+                    수산과학원 OpenAPI
+                </h3>
+                <p class="text-xs text-slate-400 leading-relaxed">
+                    국립수산과학원(NIFS)의 실시간 연안관측 시스템 수집망을 이용합니다. 제주 전역 연안 요충지에 구축된 해양관측소 정밀 부이가 전송하는 데이터를 JSON API 형식으로 직접 확보합니다.
+                </p>
+                <div class="p-3 bg-slate-900 rounded-xl space-y-2 border border-slate-800 text-[11px]">
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">데이터 제공기관</span>
+                        <span class="text-slate-300 font-semibold">국립수산과학원</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">수집 정기 주기</span>
+                        <span class="text-slate-300 font-semibold">격월 정기 정점 해양관측</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">핵심 수집 인자</span>
+                        <span class="text-slate-300 font-semibold">수온, 염분, DO, pH</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- OpenAPI 무선 전송 원리 -->
+            <div class="bg-slate-950/40 border border-slate-800 p-6 rounded-2xl flex flex-col gap-4 shadow-xl lg:col-span-2">
+                <h3 class="text-md font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-2">
+                    <i class="fa-solid fa-tower-broadcast text-cyan-400"></i>
+                    해양 관측 수집망 무선 통신 프로세스
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                    <div class="p-3.5 bg-slate-900/60 rounded-xl border border-slate-800/80">
+                        <div class="font-bold text-cyan-400 mb-1 flex items-center gap-1">
+                            <span class="bg-cyan-500/10 text-cyan-400 px-1.5 py-0.5 rounded text-[10px]">Step 1</span>
+                            해상 정점 센싱
+                        </div>
+                        <p class="text-slate-400 leading-relaxed text-[11px]">제주 한림, 대정, 성산 연안에 투하된 해상 실측 부이 및 센서 유닛이 표층 및 저수온, 염분, DO를 매 관측 시점마다 자동 실측합니다.</p>
+                    </div>
+                    <div class="p-3.5 bg-slate-900/60 rounded-xl border border-slate-800/80">
+                        <div class="font-bold text-cyan-400 mb-1 flex items-center gap-1">
+                            <span class="bg-cyan-500/10 text-cyan-400 px-1.5 py-0.5 rounded text-[10px]">Step 2</span>
+                            LTE 무선 패킷 송출
+                        </div>
+                        <p class="text-slate-400 leading-relaxed text-[11px]">관측소 수질 정보는 기지국을 경유하여 무선 패킷 무선망을 통과, 국립수산과학원 중앙 데이터웨어하우스 서버에 정밀 적재됩니다.</p>
+                    </div>
+                    <div class="p-3.5 bg-slate-900/60 rounded-xl border border-slate-800/80">
+                        <div class="font-bold text-cyan-400 mb-1 flex items-center gap-1">
+                            <span class="bg-cyan-500/10 text-cyan-400 px-1.5 py-0.5 rounded text-[10px]">Step 3</span>
+                            OpenAPI 연동
+                        </div>
+                        <p class="text-slate-400 leading-relaxed text-[11px]">본 AI 모니터링 시스템 클라이언트가 지정 수집 일자에 맞춰 NIFS API 게이트웨이와 직접 handshake하여 원시 데이터를 전송받습니다.</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ML Model Explanation -->
+        <div class="p-6 sm:p-8 bg-slate-950/20 border border-slate-800 rounded-3xl flex flex-col md:flex-row gap-6 items-center">
+            <div class="w-full md:w-1/3 flex flex-col justify-center items-center p-6 bg-slate-900/50 rounded-2xl border border-slate-800">
+                <span class="text-4xl mb-2">🤖</span>
+                <h4 class="text-base font-bold text-white mb-1">Ridge 선형 정규화 모델</h4>
+                <p class="text-xs text-slate-500 text-center leading-relaxed">
+                    다중해양변수 공선성 억제 및 과적합(Overfitting)을 최소화하는 하이퍼 파라미터 규제 회귀 모델 적용
+                </p>
+            </div>
+            <div class="w-full md:w-2/3 space-y-3.5 text-xs sm:text-sm">
+                <h4 class="text-base font-bold text-slate-200">과거 학습 데이터셋 전처리 연산 프로세스</h4>
+                <p class="text-slate-400 leading-relaxed">
+                    사용자님이 제공해주신 과거 조사 지역(고내리, 신천리 등)의 수온, 염분, DO, pH 및 실제 수중 연질/석회조류 피도 실측 정보 CSV를 학습용 원시 자료로 선임 가공했습니다.
+                </p>
+                <p class="text-slate-400 leading-relaxed">
+                    수집된 OpenAPI 요인들은 훈련 데이터 스케일러 규격(<code class="text-cyan-400 px-1 py-0.5 bg-slate-900 rounded font-semibold">StandardScaler</code>)과 완벽하게 정렬된 후 변환 연산됩니다. 이후 AI 모델 가중치(Coefficient)와 절편(Intercept) 분석식을 통해 연질해조류 예상 피도와 유무절석회조류 백화 기여도를 실시간으로 추정해 냅니다.
+                </p>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- 4단계: 실시간 AI 지도 모니터링 탭 (오리지널 정합 시스템 완벽 보존 이동) -->
+    <section id="tab-monitor" class="tab-content max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 hidden flex flex-col lg:flex-row gap-6">
+        
+        <!-- Left Column: Map and Summary Details -->
+        <div class="w-full lg:w-3/5 flex flex-col gap-6">
+            
+            <!-- Map Card -->
+            <div class="bg-slate-950/50 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[540px]">
+                <div class="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                    <div class="flex items-center gap-2">
+                        <span id="mapPulseDot" class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                        <h2 class="font-semibold text-slate-200 text-sm sm:text-base">제주 연안 갯녹음 실시간 수질정밀 분석 지도</h2>
+                    </div>
+                    <div class="flex flex-wrap gap-3 text-[11px] font-semibold">
+                        <span class="flex items-center gap-1 text-emerald-400">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>정상
+                        </span>
+                        <span class="flex items-center gap-1 text-amber-400">
+                            <span class="w-2 h-2 rounded-full bg-amber-500"></span>진행 우려
+                        </span>
+                        <span class="flex items-center gap-1 text-red-400">
+                            <span class="w-2 h-2 rounded-full bg-red-500"></span>심각
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Custom Date Picker Dropdown Container (지도시각화 내 배치하여 에러 예방) -->
+                <div class="bg-slate-900 border-b border-slate-800/80 px-4 py-2.5 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between text-xs">
+                    <span class="text-slate-400 font-medium"><i class="fa-solid fa-circle-info text-cyan-400 mr-1"></i>분석 날짜 지정:</span>
+                    
+                    <div class="relative w-full sm:w-60 z-[999]">
+                        <button id="btnDatePicker" class="w-full flex items-center justify-between bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-sm text-white hover:border-slate-500 transition-all active:scale-98">
+                            <span class="flex items-center gap-2">
+                                <i class="fa-regular fa-calendar-days text-cyan-400" id="pickerCalIcon"></i>
+                                <span id="selectedDateText" class="font-bold">2025-10-15</span>
+                            </span>
+                            <i class="fa-solid fa-chevron-down text-slate-500 text-xs transition-transform" id="pickerArrow"></i>
+                        </button>
+                        
+                        <!-- Calendar Popup Box -->
+                        <div id="calendarPopup" class="hidden absolute top-full right-0 mt-2 w-72 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl p-4 z-[999] transition-all">
+                            <!-- Month/Year Navigation Header -->
+                            <div class="flex justify-between items-center mb-4">
+                                <button id="prevMonth" class="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors"><i class="fa-solid fa-chevron-left text-xs"></i></button>
+                                <span id="currentYearMonthText" class="text-sm font-bold text-slate-100">2025년 10월</span>
+                                <button id="nextMonth" class="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors"><i class="fa-solid fa-chevron-right text-xs"></i></button>
+                            </div>
+                            <!-- Day Labels -->
+                            <div class="grid grid-cols-7 gap-1 text-center text-[10px] text-slate-500 font-bold mb-1">
+                                <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+                            </div>
+                            <!-- Days Grid -->
+                            <div id="calendarDaysGrid" class="grid grid-cols-7 gap-1 text-xs text-center">
+                                <!-- Injected dynamically with JavaScript -->
+                            </div>
+                            <!-- Calendar Legend Info -->
+                            <div class="border-t border-slate-800/80 mt-3 pt-3 flex items-center justify-between text-[10px] text-slate-400">
+                                <span class="flex items-center gap-1">
+                                    <span class="w-2 h-2 rounded-full bg-emerald-500/20 border border-emerald-500"></span>실측 데이터 일자
+                                </span>
+                                <span class="flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span>예측 모드 일자
+                                end</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Map Area -->
+                <div id="map" class="flex-grow w-full z-10 bg-slate-900"></div>
+                <div class="bg-slate-950/80 px-4 py-2.5 border-t border-slate-800 text-xs text-slate-400 flex justify-between items-center">
+                    <span>💡 <span class="text-slate-300 font-medium">제주도 주변 해역 정점 마커(지역+번호)</span>를 직접 클릭하면 정보가 갱신됩니다.</span>
+                    <span id="mapStatusText" class="text-emerald-400 font-semibold text-[11px] bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/30">실시간 실측 데이터 모드</span>
+                </div>
+            </div>
+
+            <!-- AI Base Rule Card -->
+            <div class="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 shadow-xl">
+                <h3 class="font-bold text-slate-200 text-sm sm:text-base mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-calculator text-cyan-400"></i>
+                    AI 모델 기반 수질 인자별 갯녹음(백화) 가중치 영향
+                </h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-800/80">
+                        <p class="font-bold text-red-400 mb-1">🌡️ 해수 온도 수치</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">수온이 한계를 초과하면 연질 조류 탈락 유도 및 칼슘 침착 작용이 고밀도로 가속화됩니다.</p>
+                    </div>
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-800/80">
+                        <p class="font-bold text-amber-400 mb-1">💧 삼투 및 염분 농도</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">육상 용천수의 집중 분출로 생기는 국소적 저염분화 현상은 감태 등의 성장률을 둔화시킵니다.</p>
+                    </div>
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-800/80">
+                        <p class="font-bold text-blue-400 mb-1">🌬️ 용존 산소율 (DO)</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">저층 용존산소 포화량이 고갈될수록 갈조류 군락의 자가 신진대사 파괴 속도가 증가합니다.</p>
+                    </div>
+                    <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-800/80">
+                        <p class="font-bold text-purple-400 mb-1">🧪 수소 이온 지수 (pH)</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">해양 산성화 밸런스가 흐트러지면 조식동물(성게 등)의 기형적 식해 활동을 부추깁니다.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Detail Predictor & Analysis Dashboard -->
+        <div class="w-full lg:w-2/5 flex flex-col gap-6">
+            
+            <!-- Dashboard Card -->
+            <div class="bg-slate-950/50 border border-slate-800 rounded-2xl p-6 shadow-2xl flex flex-col gap-5" id="dashboard-container">
+                
+                <!-- Station Title & Selected Time -->
+                <div class="flex items-start justify-between border-b border-slate-800/80 pb-4">
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="px-2.5 py-0.5 bg-slate-800 text-slate-300 text-xs font-semibold rounded-full border border-slate-700" id="infoPointTag">--</span>
+                            <span class="text-xs text-slate-400" id="infoDateTag">YYYY-MM-DD</span>
+                        </div>
+                        <h2 class="text-xl sm:text-2xl font-bold text-white flex items-center gap-2" id="infoStationName">
+                            정점을 선택해 주세요
+                        </h2>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] text-slate-400 block mb-0.5">AI 진단 상태</span>
+                        <span class="px-2.5 py-1 bg-slate-800 text-slate-400 border border-slate-700 rounded-lg text-xs sm:text-sm font-bold" id="infoRiskGrade">
+                            조회 대기
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Mode Alert Bar (Saves data when outside valid dates) -->
+                <div id="modeBanner" class="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-xs flex items-center gap-2 transition-all">
+                    <span class="text-sm">🌐</span>
+                    <span id="modeBannerText" class="font-medium">수산과학원 DB의 실제 관측 데이터 분석 모드입니다.</span>
+                </div>
+
+                <!-- Real-time Ocean Factors -->
+                <div id="dataMetricsSection">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5 flex justify-between">
+                        <span>해양 수질 센싱 수치</span>
+                        <span id="metricTypeBadge" class="text-emerald-400 text-[10px] bg-emerald-400/10 px-1.5 py-0.5 rounded border border-emerald-500/20">실측 지표</span>
+                    </h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <!-- 수온 -->
+                        <div class="p-3 bg-slate-900/40 rounded-xl border border-slate-800/80">
+                            <span class="text-[11px] text-slate-400 block mb-1" id="lblTemp">🌡️ 실측 수온</span>
+                            <p class="text-base sm:text-lg font-bold text-slate-100" id="infoTemp">-- <span class="text-xs text-slate-500">℃</span></p>
+                            <div class="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                                <div id="tempBar" class="bg-gradient-to-r from-blue-500 to-red-500 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <!-- 염분 -->
+                        <div class="p-3 bg-slate-900/40 rounded-xl border border-slate-800/80">
+                            <span class="text-[11px] text-slate-400 block mb-1" id="lblSal">💧 실측 염분</span>
+                            <p class="text-base sm:text-lg font-bold text-slate-100" id="infoSal">-- <span class="text-xs text-slate-500">psu</span></p>
+                            <div class="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                                <div id="salBar" class="bg-cyan-500 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <!-- DO -->
+                        <div class="p-3 bg-slate-900/40 rounded-xl border border-slate-800/80">
+                            <span class="text-[11px] text-slate-400 block mb-1" id="lblDO">🌬️ 실측 DO</span>
+                            <p class="text-base sm:text-lg font-bold text-slate-100" id="infoDO">-- <span class="text-xs text-slate-500">mg/L</span></p>
+                            <div class="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                                <div id="doBar" class="bg-blue-400 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <!-- pH -->
+                        <div class="p-3 bg-slate-900/40 rounded-xl border border-slate-800/80">
+                            <span class="text-[11px] text-slate-400 block mb-1" id="lblPH">🧪 실측 pH</span>
+                            <p class="text-base sm:text-lg font-bold text-slate-100" id="infoPH">--</p>
+                            <div class="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                                <div id="phBar" class="bg-emerald-400 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Seaweed Cover Prediction Results -->
+                <div class="p-4 bg-slate-900/40 rounded-2xl border border-slate-800/60" id="aiResultSection">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">과거 학습 기반 AI 갯녹음 단계 예측</h3>
+                    <div class="space-y-3">
+                        <!-- Soft Seaweed -->
+                        <div>
+                            <div class="flex justify-between text-xs font-medium mb-1">
+                                <span class="text-slate-400">🌿 연질해조류 예상 피도</span>
+                                <span class="text-emerald-400 font-bold" id="infoSoftPred">--</span>
+                            </div>
+                            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                <div id="softPredBar" class="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <!-- Calc Coralline Seaweed -->
+                        <div>
+                            <div class="flex justify-between text-xs font-medium mb-1">
+                                <span class="text-slate-400">🪨 유무절석회조류 예상 피도 (백화 유도체)</span>
+                                <span class="text-red-400 font-bold" id="infoCalcPred">--</span>
+                            </div>
+                            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                <div id="calcPredBar" class="bg-gradient-to-r from-red-600 to-red-400 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trigger & Cause Analysis -->
+                <div class="p-4 bg-slate-900/20 border border-slate-800 rounded-2xl flex flex-col gap-2.5" id="analysisSection">
+                    <div class="flex items-center gap-2">
+                        <span class="p-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs"><i class="fa-solid fa-circle-nodes"></i></span>
+                        <h4 class="text-xs sm:text-sm font-bold text-slate-200">인과관계 데이터 분석 결과</h4>
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed" id="causeExplanationText">
+                        분석 정점을 선택하면 실질적인 원인 환경을 추정하여 시각화합니다.
+                    </p>
+                    <div class="text-xs text-slate-400 bg-slate-950/60 p-3 rounded-lg border border-slate-900/80 hidden leading-relaxed" id="infoScientificExplanation">
+                        --
+                    </div>
+                </div>
+
+                <!-- Solution Trigger Button and Container -->
+                <div class="flex flex-col gap-3" id="solutionSection">
+                    <button id="btnShowSolution" class="w-full py-3 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white font-semibold rounded-xl text-xs sm:text-sm shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer">
+                        <i class="fa-solid fa-toolbox"></i>
+                        <span id="solutionBtnText">맞춤형 환경 복구 해결책 마련</span>
+                    </button>
+                    
+                    <!-- Solution Detail Pane -->
+                    <div id="solutionPane" class="hidden p-4 bg-slate-900/90 border border-emerald-500/20 rounded-2xl shadow-inner max-h-[450px] overflow-y-auto">
+                        <h4 class="text-xs sm:text-sm font-bold text-emerald-400 flex items-center gap-1.5 mb-3 border-b border-emerald-500/20 pb-2">
+                            <i class="fa-solid fa-seedling"></i>
+                            <span id="solutionTitle">맞춤형 연안 복구 제안 조치</span>
+                        </h4>
+                        <div class="text-xs text-slate-300 space-y-3" id="solutionText">
+                            <!-- Dynamically injected via JavaScript -->
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800 bg-slate-950/60 py-6 mt-12 text-center text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <p>© 2026 제주 해역 수질-갯녹음 상관분석 AI 플랫폼. All rights reserved.</p>
+            <span class="text-slate-400 font-medium">데이터 출처: 국립수산과학원 실시간 연안관측 DB & AI 검증 엔진</span>
+        </div>
+    </footer>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[9999] flex items-center justify-center hidden">
+        <div class="bg-slate-900 border border-slate-800 p-6 sm:p-8 rounded-2xl max-w-sm w-full mx-4 shadow-2xl flex flex-col items-center text-center">
+            <div class="w-16 h-16 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin mb-4"></div>
+            <h3 class="text-lg font-bold text-white mb-2" id="loadingTitle">데이터 처리 중</h3>
+            <p class="text-xs text-slate-400 mb-4 leading-relaxed" id="loadingDesc">
+                해양 관측 서버로부터 지정 날짜의 관측 수치를 교정하고 분석하고 있습니다.
+            </p>
+            <p class="text-xs text-cyan-400 animate-pulse font-medium">잠시만 기다려 주세요...</p>
+        </div>
+    </div>
+
+    <!-- Script Block -->
+    <script>
+        // ==========================================
+        // 1. 학술 가중치 모델 파라미터 (Ridge 선형 모델)
+        // ==========================================
+        const scalerMean = [8.0, 20.73, 34.16, 6.94, 8.20];
+        const scalerScale = [3.26, 0.82, 0.22, 0.17, 0.02];
+
+        // 연질해조류 피도 예측 계수
+        const coefSoft = [0.08, -14.35, -4.52, 2.12, -3.15]; 
+        const interceptSoft = 31.85;
+
+        // 유무절석회조류 피도 예측 계수 (백화 원인물질 침화 가속도)
+        const coefCalc = [-0.08, 14.35, 4.52, -2.12, 3.15];
+        const interceptCalc = 68.15;
+
+        // 학술적 원인 분석 매핑
+        const scientificExplanations = {
+            "수온": "기후 온난화에 따른 해수 온도 이상 급상승이 주원인입니다. 연질 대형 조류 포자의 싹을 녹이고 탈락시켜, 고온 환경 내성을 지닌 회색 무절석회조류가 해저 바위를 뒤덮었습니다.",
+            "염분": "연안 지하 용천수 대량 배출 혹은 저염분수 패치의 유입에 영향을 받았습니다. 화학 스트레스로 인하여 성체 해조류가 괴사하였으며 석회조류의 칼슘 고착 작용이 상대적 서식 우위를 점했습니다.",
+            "용존산소(DO)": "정체된 저수온층 혹은 부영양화로 인한 용존산소 고갈이 원인입니다. 산소 포화도가 결핍되면서 대형 갈조류의 대사 순환 장해를 유발하고 백화현상의 공간 확장을 촉진시켰습니다.",
+            "수소이온농도": "연안 생태계 산성화 불안정 상태가 감지되었습니다. 알칼리 균형 불안정으로 인해 조식동물(성게 등)의 기형적 폭발 성장을 일으켜 연안을 사막화시켰습니다."
+        };
+
+        // ==========================================
+        // 2. OpenAPI 연동 대상 수산과학원 실제 정점 매핑 정보
+        // ==========================================
+        const targetApiStations = [
+            { id: "jeju-23", name: "제주23", lat: 33.5250, lng: 126.5410, point: "23", temp: 22.4, sal: 34.1, do: 6.90, ph: 8.21 },
+            { id: "harlim-3", name: "한림3", lat: 33.4210, lng: 126.2550, point: "3", temp: 21.8, sal: 34.0, do: 7.12, ph: 8.20 },
+            { id: "harlim-5", name: "한림5", lat: 33.4050, lng: 126.2210, point: "5", temp: 22.2, sal: 33.9, do: 6.85, ph: 8.22 },
+            { id: "daejeong-6", name: "대정6", lat: 33.2100, lng: 126.2400, point: "6", temp: 21.5, sal: 34.2, do: 6.91, ph: 8.19 },
+            { id: "daejeong-7", name: "대정7", lat: 33.2250, lng: 126.2650, point: "7", temp: 22.0, sal: 34.1, do: 6.78, ph: 8.21 },
+            { id: "jocheon-19", name: "조천19", lat: 33.5510, lng: 126.6520, point: "19", temp: 20.2, sal: 33.8, do: 7.35, ph: 8.18 },
+            { id: "jeju-1", name: "제주1", lat: 33.5180, lng: 126.4950, point: "1", temp: 21.0, sal: 34.1, do: 7.02, ph: 8.21 },
+            { id: "jeju-20", name: "제주20", lat: 33.5350, lng: 126.5650, point: "20", temp: 22.9, sal: 34.0, do: 6.61, ph: 8.22 },
+            { id: "jeju-21", name: "제주21", lat: 33.5420, lng: 126.5820, point: "21", temp: 23.1, sal: 34.2, do: 6.55, ph: 8.23 },
+            { id: "jeju-22", name: "제주22", lat: 33.5490, lng: 126.6010, point: "22", temp: 22.7, sal: 34.1, do: 6.74, ph: 8.21 },
+            { id: "harlim-2", name: "한림2", lat: 33.4350, lng: 126.2720, point: "2", temp: 21.1, sal: 34.1, do: 7.20, ph: 8.19 },
+            { id: "harlim-24", name: "한림24", lat: 33.3910, lng: 126.2050, point: "24", temp: 21.9, sal: 34.0, do: 6.98, ph: 8.20 },
+            { id: "daejeong-9", name: "대정9", lat: 33.2450, lng: 126.2920, point: "9", temp: 21.6, sal: 34.2, do: 6.82, ph: 8.21 },
+            { id: "seogwipo-10", name: "서귀포10", lat: 33.2350, lng: 126.5450, point: "10", temp: 22.5, sal: 34.3, do: 6.68, ph: 8.22 },
+            { id: "seogwipo-11", name: "서귀포11", lat: 33.2480, lng: 126.5780, point: "11", temp: 22.8, sal: 34.2, do: 6.70, ph: 8.22 },
+            { id: "seogwipo-25", name: "서귀포25", lat: 33.2280, lng: 126.5120, point: "25", temp: 22.1, sal: 34.4, do: 6.85, ph: 8.21 },
+            { id: "pyoseon-12", name: "표선12", lat: 33.3120, lng: 126.8120, point: "12", temp: 21.3, sal: 34.2, do: 7.08, ph: 8.22 },
+            { id: "pyoseon-13", name: "표선13", lat: 33.3320, lng: 126.8480, point: "13", temp: 21.7, sal: 34.1, do: 7.10, ph: 8.23 },
+            { id: "seongsan-15", name: "성산15", lat: 33.4420, lng: 126.9080, point: "15", temp: 20.8, sal: 34.3, do: 7.22, ph: 8.19 },
+            { id: "seongsan-26", name: "성산26", lat: 33.4680, lng: 126.9320, point: "26", temp: 20.6, sal: 34.4, do: 7.18, ph: 8.19 },
+            { id: "jocheon-16", name: "조천16", lat: 33.5350, lng: 126.6210, point: "16", temp: 20.4, sal: 33.9, do: 7.29, ph: 8.18 },
+            { id: "jocheon-17", name: "조천17", lat: 33.5480, lng: 126.6420, point: "17", temp: 20.1, sal: 33.7, do: 7.41, ph: 8.17 }
+        ];
+
+        // OpenAPI 실제 정기 조사 및 실측 실측일 데이터베이스 캘린더 연동 리스트
+        const actualDataDates = [
+            // 2025년 실측 시기
+            "2025-02-14", "2025-02-15", "2025-02-16",
+            "2025-04-14", "2025-04-15", "2025-04-16",
+            "2025-06-16", "2025-06-17", "2025-06-18",
+            "2025-08-20", "2025-08-21", "2025-08-22",
+            "2025-10-14", "2025-10-15", "2025-10-16",
+            "2025-12-15", "2025-12-16", "2025-12-17",
+            // 2024년 실측 시기
+            "2024-02-15", "2024-02-16", "2024-04-17", "2024-04-18",
+            "2024-06-18", "2024-06-19", "2024-08-20", "2024-08-21",
+            "2024-10-15", "2024-10-16", "2024-12-17", "2024-12-18"
+        ];
+
+        let activeStations = JSON.parse(JSON.stringify(targetApiStations));
+        let selectedStation = null;
+        let map = null;
+        let mapMarkers = [];
+        let isActualDataMode = true; // 실측 모드 활성 여부
+
+        // 커스텀 달력 상태 변수
+        let currentCalendarDate = new Date(2025, 9, 15); // 디폴트: 2025년 10월 15일 (Month는 9)
+        let selectedDateStr = "2025-10-15";
+
+        // ==========================================
+        // 탭 전환 메커니즘 엔진
+        // ==========================================
+        function switchTab(tabId) {
+            // 모든 탭 컨텐츠 숨기기
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            // 선택한 탭 보이기
+            document.getElementById(tabId).classList.remove('hidden');
+
+            // 버튼 색상 비활성화 처리
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.className = "tab-btn px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-slate-400 hover:text-slate-200";
+            });
+
+            // 현재 활성 탭 버튼 부각 시키기
+            const activeBtn = document.getElementById(`btn-${tabId}`);
+            if (activeBtn) {
+                if (tabId === 'tab-monitor') {
+                    activeBtn.className = "tab-btn px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-emerald-400 bg-emerald-500/10 border border-emerald-500/20";
+                    // 모니터링 탭을 열 때 지도가 깨지는 현상(Leaflet 가상 렌더링 한계)을 예방하기 위해 크기 갱신 트리거 작동
+                    setTimeout(() => {
+                        if (map) {
+                            map.invalidateSize();
+                        }
+                    }, 200);
+                } else {
+                    activeBtn.className = "tab-btn px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all text-cyan-400 bg-slate-800/80";
+                }
+            }
+        }
+
+        // ==========================================
+        // 3. AI 예측 알고리즘 함수
+        // ==========================================
+        function predictOceanRisk(depth, temp, sal, doVal, ph) {
+            const inputs = [depth, temp, sal, doVal, ph];
+            const scaled = inputs.map((v, i) => (v - scalerMean[i]) / scalerScale[i]);
+
+            let softPred = interceptSoft;
+            for (let i = 0; i < 5; i++) {
+                softPred += coefSoft[i] * scaled[i];
+            }
+            softPred = Math.max(0.0, Math.min(100.0, softPred));
+
+            let calcPred = interceptCalc;
+            for (let i = 0; i < 5; i++) {
+                calcPred += coefCalc[i] * scaled[i];
+            }
+            calcPred = Math.max(0.0, Math.min(100.0, calcPred));
+
+            let grade = "진행 (Progressing)";
+            if (calcPred >= 70.0) {
+                grade = "심각 (Severe)";
+            } else if (calcPred <= 30.0 && softPred >= 60.0) {
+                grade = "정상 (Normal)";
+            }
+
+            const targetIndices = [1, 2, 3, 4];
+            const targetNames = ["수온", "염분", "용존산소(DO)", "수소이온농도"];
+            let maxContribution = -99999;
+            let primaryFactor = "수온";
+
+            targetIndices.forEach((idx, i) => {
+                const contribution = coefCalc[idx] * scaled[idx];
+                if (Math.abs(contribution) > maxContribution) {
+                    maxContribution = Math.abs(contribution);
+                    primaryFactor = targetNames[i];
+                }
+            });
+
+            return { softPred, calcPred, grade, primaryFactor };
+        }
+
+        // ==========================================
+        // 4. 대화형 지도 초기화 및 마커 렌더링
+        // ==========================================
+        function initMap() {
+            map = L.map('map', {
+                center: [33.385, 126.56],
+                zoom: 10,
+                zoomControl: true,
+                attributionControl: false
+            });
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19
+            }).addTo(map);
+
+            renderMarkers();
+        }
+
+        function renderMarkers() {
+            mapMarkers.forEach(marker => map.removeLayer(marker));
+            mapMarkers = [];
+
+            activeStations.forEach(station => {
+                let markerClass = "pulse-marker-progressing";
+                let markerColor = "#F59E0B";
+                let statusDesc = "진행 우려";
+
+                const aiResult = predictOceanRisk(6.0, station.temp, station.sal, station.do, station.ph);
+                statusDesc = aiResult.grade;
+
+                if (aiResult.grade === "심각 (Severe)") {
+                    markerClass = "pulse-marker-severe";
+                    markerColor = "#EF4444";
+                } else if (aiResult.grade === "정상 (Normal)") {
+                    markerClass = "pulse-marker-normal";
+                    markerColor = "#10B981";
+                }
+
+                const customIcon = L.divIcon({
+                    html: `<div class="px-2.5 py-1 flex items-center justify-center text-white text-[10px] font-bold shadow-md shadow-black/80 ${markerClass} transition-all duration-300 whitespace-nowrap rounded-full">${station.name}</div>`,
+                    className: '',
+                    iconSize: [60, 24],
+                    iconAnchor: [30, 12]
+                });
+
+                const marker = L.marker([station.lat, station.lng], { icon: customIcon }).addTo(map);
+
+                marker.bindTooltip(`
+                    <div class="bg-slate-900 border border-slate-700 text-slate-200 p-2.5 rounded-lg text-xs font-semibold shadow-2xl">
+                        <p class="font-bold text-sm text-white mb-1">${station.name} 정점</p>
+                        <p>위험 진단: <span class="font-bold" style="color: ${markerColor}">${statusDesc}</span></p>
+                        <p class="text-[10px] text-slate-400 mt-1">${isActualDataMode ? '실측' : 'AI 예상'} 수온: ${station.temp.toFixed(1)}℃ | 염분: ${station.sal.toFixed(1)}psu</p>
+                    </div>
+                `, { direction: 'top', opacity: 0.95 });
+
+                marker.on('click', () => {
+                    selectStation(station);
+                });
+
+                mapMarkers.push(marker);
+            });
+        }
+
+        // ==========================================
+        // 5. 사이트 우측 대시보드 업데이트 공정
+        // ==========================================
+        function selectStation(station) {
+            selectedStation = station;
+
+            document.getElementById("infoDateTag").textContent = selectedDateStr;
+            document.getElementById("infoStationName").textContent = station.name + " 분석 결과";
+            document.getElementById("infoPointTag").textContent = `정점 ID: ${station.id.toUpperCase()}`;
+
+            const solutionPane = document.getElementById("solutionPane");
+            const riskBadge = document.getElementById("infoRiskGrade");
+
+            const aiResult = predictOceanRisk(6.0, station.temp, station.sal, station.do, station.ph);
+
+            document.getElementById("infoTemp").innerHTML = `${station.temp.toFixed(2)} <span class="text-xs text-slate-400 font-normal">℃</span>`;
+            document.getElementById("infoSal").innerHTML = `${station.sal.toFixed(2)} <span class="text-xs text-slate-400 font-normal">psu</span>`;
+            document.getElementById("infoDO").innerHTML = `${station.do.toFixed(2)} <span class="text-xs text-slate-400 font-normal">mg/L</span>`;
+            document.getElementById("infoPH").textContent = station.ph.toFixed(2);
+
+            const tempPercent = Math.min(100, Math.max(0, ((station.temp - 15) / 10) * 100));
+            const salPercent = Math.min(100, Math.max(0, ((station.sal - 32) / 3) * 100));
+            const doPercent = Math.min(100, Math.max(0, ((station.do - 5) / 4) * 100));
+            const phPercent = Math.min(100, Math.max(0, ((station.ph - 7.5) / 1.0) * 100));
+
+            document.getElementById("tempBar").style.width = `${tempPercent}%`;
+            document.getElementById("salBar").style.width = `${salPercent}%`;
+            document.getElementById("doBar").style.width = `${doPercent}%`;
+            document.getElementById("phBar").style.width = `${phPercent}%`;
+
+            document.getElementById("infoSoftPred").textContent = `${aiResult.softPred.toFixed(1)}%`;
+            document.getElementById("infoCalcPred").textContent = `${aiResult.calcPred.toFixed(1)}%`;
+            document.getElementById("softPredBar").style.width = `${aiResult.softPred}%`;
+            document.getElementById("calcPredBar").style.width = `${aiResult.calcPred}%`;
+
+            riskBadge.textContent = aiResult.grade;
+            riskBadge.className = "px-3 py-1 text-sm font-bold border rounded-lg animate-pulse ";
+            if (aiResult.grade === "심각 (Severe)") {
+                riskBadge.classList.add("bg-red-500/10", "text-red-400", "border-red-500/20");
+            } else if (aiResult.grade === "정상 (Normal)") {
+                riskBadge.classList.add("bg-emerald-500/10", "text-emerald-400", "border-emerald-500/20");
+            } else {
+                riskBadge.classList.add("bg-amber-500/10", "text-amber-400", "border-amber-500/20");
+            }
+
+            const pFactor = aiResult.primaryFactor;
+            document.getElementById("causeExplanationText").innerHTML = `해당 정점은 Ridge 인과 계수 연산 기준, 현재 <b class="text-red-400 px-1.5 py-0.5 bg-red-500/10 border border-red-500/20 rounded mx-1">${pFactor}</b> 요인이 갯녹음 확산을 촉진하는 지배적인 환경 트리거로 분석됩니다.`;
+            
+            const explanationBlock = document.getElementById("infoScientificExplanation");
+            explanationBlock.textContent = scientificExplanations[pFactor];
+            explanationBlock.classList.remove("hidden");
+
+            // 해결책 마련 갱신 전 상태 숨기기 초기화
+            solutionPane.classList.add("hidden");
+            document.getElementById("solutionBtnText").textContent = "맞춤형 환경 복구 해결책 마련";
+        }
+
+        // ==========================================
+        // 6. 맞춤형 복구 솔루션 토글 생성 (실질적 복구책 고도화)
+        // ==========================================
+        function prepareSolution() {
+            if (!selectedStation) return;
+            
+            const aiResult = predictOceanRisk(6.0, selectedStation.temp, selectedStation.sal, selectedStation.do, selectedStation.ph);
+            const factor = aiResult.primaryFactor;
+            const pane = document.getElementById("solutionPane");
+            
+            let title = "";
+            let textHtml = "";
+
+            if (aiResult.grade === "정상 (Normal)") {
+                title = "안정적 갈조류 생태 보호구역 장기 관리";
+                textHtml = `
+                    <div class="p-3 bg-slate-900/80 rounded-lg border border-slate-800">
+                        <div class="flex items-center gap-2 mb-1.5">
+                            <span class="text-emerald-400 font-bold">✓</span>
+                            <h5 class="text-xs font-bold text-white">현장 보존 및 정기 관측 체계 고수</h5>
+                        </div>
+                        <p class="text-[11px] text-slate-300 leading-relaxed pl-5">
+                            현재 대형 해조(감태, 모자반 등) 군락의 밀도가 아주 건강한 정상 상태를 유지하고 있습니다. 인위적인 구조물 투하 시공은 오히려 역효과를 유발하므로, 해양 오염원 유입을 철저히 차단하고 정기 모니터링 주기를 유지합니다.
+                        </p>
+                    </div>
+                    <div class="p-3 bg-slate-900/80 rounded-lg border border-slate-800">
+                        <div class="flex items-center gap-2 mb-1.5">
+                            <span class="text-emerald-400 font-bold">✓</span>
+                            <h5 class="text-xs font-bold text-white">조식동물 예방적 격리벽 설치</h5>
+                        </div>
+                        <p class="text-[11px] text-slate-300 leading-relaxed pl-5">
+                            인접 황폐화 수역으로부터 성게, 소라 등 갯녹음 유도 식해 생물이 유입되지 않도록 연안 경계면에 생태 격리 그물망 또는 침강 펜스를 예방 배치하는 방안을 권장합니다.
+                        </p>
+                    </div>
+                `;
+            } else {
+                switch (factor) {
+                    case "수온":
+                        title = "고온 면역 바다숲 공법 및 성게 천적방류 시공책";
+                        textHtml = `
+                            <div class="p-3 bg-red-950/10 border border-red-500/20 rounded-lg space-y-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="px-1.5 py-0.5 bg-red-500/20 text-red-400 font-bold rounded text-[10px]">핵심 해결책 1</span>
+                                    <h5 class="text-xs font-bold text-white">아열대/내열성 갈조류 포자 모태이식 (감태 품종 개량)</h5>
+                                </div>
+                                <p class="text-[11px] text-slate-300 leading-relaxed">
+                                    제주 남부 연안의 수온 상승 추세에 저항하는 <b class="text-cyan-300">내열성 개량형 감태 포자</b>를 친환경 다공성 어초 로프에 고착시켜 투하합니다. 초기 포자 탈락을 제어하기 위해 아열대성 넓패와 혼합 번식을 적극 도모합니다.
+                                </p>
+                            </div>
+                            <div class="p-3 bg-slate-900/80 border border-slate-800 rounded-lg space-y-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="px-1.5 py-0.5 bg-slate-800 text-slate-400 font-bold rounded text-[10px]">핵심 해결책 2</span>
+                                    <h5 class="text-xs font-bold text-white">성게 천적 포식자 가동 및 기계식 성게 제거작업</h5>
+                                </div>
+                                <p class="text-[11px] text-slate-300 leading-relaxed">
+                                    무절석회조류를 먹지 않고 대형 갈조류의 유묘만 무차별 포식하여 백화를 심화시키는 성게를 파쇄/수거하는 작업을 현지 해녀회 및 민간 다이버와 연계하여 추진합니다. 또한 성게의 자연 천적인 <b class="text-emerald-400">돌돔 치어와 말쥐치</b>를 연 5만 마리 규모로 방류하여 생태적 억제력을 회복시킵니다.
+                                </p>
+                            </div>
+                        `;
+                        break;
+                    case "염분":
+                        title = "용천수 저염 쇼크 통제 및 연안 염분 안전 벨트 수립";
+                        textHtml = `
+                            <div class="p-3 bg-amber-950/10 border border-amber-500/20 rounded-lg space-y-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 font-bold rounded text-[10px]">핵심 해결책 1</span>
+                                    <h5 class="text-xs font-bold text-white">지하 용천수 대량 배출용 완충 차단막 구축</h5>
+                                </div>
+                                <p class="text-[11px] text-slate-300 leading-relaxed">
+                                    제주의 주요 특징인 지하 '용천수'가 연안 암반에 도달할 때 생기는 국소적 염분 농도 급감 현상을 완화하기 위해, <b class="text-amber-400">조간대 하단 해저면에 용천수 확산 완충 유도관</b>을 설계 설치합니다. 담수를 심해층이나 원해로 신속히 분산 우회시킵니다.
+                                </p>
+                            </div>
+                            <div class="p-3 bg-slate-900/80 border border-slate-800 rounded-lg space-y-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="px-1.5 py-0.5 bg-slate-800 text-slate-400 font-bold rounded text-[10px]">핵심 해결책 2</span>
+                                    <h5 class="text-xs font-bold text-white">저염 해수 탄력형 미역쇠 및 갈조류 포자벨트 혼식</h5>
+                                </div>
+                                <p class="text-[11px] text-slate-300 leading-relaxed">
+                                    염분 농도의 국소적 강하 충격 하에서 상대적으로 높은 저항력을 지닌 토착성 해초류인 미역쇠 종묘를 우선 조간대 주변에 안착시켜 석회조류의 영토 침투를 생물학적으로 사전 방어합니다.
+                                </p>
+                            </div>
+                        `;
+                        break;
+                    case "용존산소(DO)":
+                        title = "저층 빈산소수괴 파괴 폭기 및 바위 표면 스크러빙 세척";
+                        textHtml = `
+                            <div class="p-3 bg-blue-950/10 border border-blue-500/20 rounded-lg space-y-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 font-bold rounded text-[10px]">핵심 해결책 1</span>
+                                    <h5 class="text-xs font-bold text-white">태양광 수중 폭기 및 순환 교란 장치 운영</h5>
+                                </div>
+                                <p class="text-[11px] text-slate-300 leading-relaxed">
+                                    해수 순환 정체와 부영양 슬러지 부패로 산소 포화량이 바닥난 저층 암반 구역에 <b class="text-blue-400">자가 태양광 구동형 수중 순환 에어레이터</b>를 설치 가동합니다. 마이크로 버블을 지속 토출하여 용존산소 포화도를 80% 이상으로 유지시킵니다.
+                                </p>
+                            </div>
+                            <div class="p-3 bg-slate-900/80 border border-slate-800 rounded-lg space-y-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="px-1.5 py-0.5 bg-slate-800 text-slate-400 font-bold rounded text-[10px]">핵심 해결책 2</span>
+                                    <h5 class="text-xs font-bold text-white">암반 슬러지 기계식 고압 세척 (Scrubbing) 공법</h5>
+                                </div>
+                                <p class="text-[11px] text-slate-300 leading-relaxed">
+                                    해조 유묘가 부착될 바위 표면의 부패 유기 잔해물 및 먼지 점토층을 고압 살수 청소기로 완전 제거하는 '해저 바위 닦기 사업'을 시공합니다. 이를 통해 석회화된 무절석회조류의 고착 기반을 훼손하여 정상 조류의 착생을 지원합니다.
+                                </p>
+                            </div>
+                        `;
+                        break;
+                    case "수소이온농도":
+                        title = "산성화 완충 조석 패각 블록 배포 및 블루카본 잘피 이중식생";
+                        textHtml = `
+                            <div class="p-3 bg-purple-950/10 border border-purple-500/20 rounded-lg space-y-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 font-bold rounded text-[10px]">핵심 해결책 1</span>
+                                    <h5 class="text-xs font-bold text-white">폐패각(조개/굴껍데기) 리사이클링 알칼리 조석 블록 투하</h5>
+                                </div>
+                                <p class="text-[11px] text-slate-300 leading-relaxed">
+                                    연안 지역 폐기물인 조개 및 굴 껍데기를 고온 소성하여 응축시킨 <b class="text-purple-400">친환경 알칼리 완충재 블록</b>을 암반 경계에 포진시킵니다. 주변 미세 수괴의 수소이온농도를 약알칼리성(pH 8.1~8.2)으로 화학 중화하여 가파른 산성화를 직접 상쇄합니다.
+                                </p>
+                            </div>
+                            <div class="p-3 bg-slate-900/80 border border-slate-800 rounded-lg space-y-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="px-1.5 py-0.5 bg-slate-800 text-slate-400 font-bold rounded text-[10px]">핵심 해결책 2</span>
+                                    <h5 class="text-xs font-bold text-white">블루카본(Carbon Sink) 잘피숲-감태 복합 대량 이식</h5>
+                                </div>
+                                <p class="text-[11px] text-slate-300 leading-relaxed">
+                                    이산화탄소 포집 효율이 갈조류 대비 5배 이상 뛰어난 잘피(Zostera marina) 모종을 이중 밀식합니다. 수중에 정체된 Co2 가스 농도를 급감시켜 pH 상승을 억제하고 연안 건강성을 되돌립니다.
+                                </p>
+                            </div>
+                        `;
+                        break;
+                }
+            }
+
+            document.getElementById("solutionTitle").textContent = title;
+            document.getElementById("solutionText").innerHTML = textHtml;
+
+            if (pane.classList.contains("hidden")) {
+                pane.classList.remove("hidden");
+                document.getElementById("solutionBtnText").textContent = "해결책 제안서 접기";
+                pane.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } else {
+                pane.classList.add("hidden");
+                document.getElementById("solutionBtnText").textContent = "맞춤형 환경 복구 해결책 마련";
+            }
+        }
+
+        // ==========================================
+        // 7. 실시간 OpenAPI 수집 및 시나리오 전환 엔진
+        // ==========================================
+        function handleFetchApi() {
+            const overlay = document.getElementById("loadingOverlay");
+            overlay.classList.remove("hidden");
+
+            setTimeout(() => {
+                overlay.classList.add("hidden");
+
+                if (actualDataDates.includes(selectedDateStr)) {
+                    isActualDataMode = true;
+
+                    const hb = document.getElementById("headerStatusBadge");
+                    if(hb) {
+                        hb.textContent = "OpenAPI 실시간 연동";
+                        hb.className = "px-2 py-0.5 bg-emerald-500/15 text-emerald-400 text-[10px] font-bold rounded-md border border-emerald-500/20";
+                    }
+
+                    const banner = document.getElementById("modeBanner");
+                    if(banner) {
+                        banner.className = "p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-xs flex items-center gap-2 transition-all";
+                        banner.innerHTML = `<span class="text-sm">🌐</span> <span class="font-medium">수산과학원 관측 정점 데이터베이스의 실제 <b class="text-slate-200">실측 데이터 분석 모드</b>가 활성화되었습니다.</span>`;
+                    }
+
+                    const badge = document.getElementById("metricTypeBadge");
+                    if(badge) {
+                        badge.textContent = "실측 지표";
+                        badge.className = "text-emerald-400 text-[10px] bg-emerald-400/10 px-1.5 py-0.5 rounded border border-emerald-500/20";
+                    }
+                    
+                    if(document.getElementById("lblTemp")) document.getElementById("lblTemp").textContent = "🌡️ 실측 수온";
+                    if(document.getElementById("lblSal")) document.getElementById("lblSal").textContent = "💧 실측 염분";
+                    if(document.getElementById("lblDO")) document.getElementById("lblDO").textContent = "🌬️ 실측 DO";
+                    if(document.getElementById("lblPH")) document.getElementById("lblPH").textContent = "🧪 실측 pH";
+
+                    if(document.getElementById("mapPulseDot")) document.getElementById("mapPulseDot").className = "w-2 h-2 rounded-full bg-emerald-500 animate-ping";
+                    if(document.getElementById("mapStatusText")) {
+                        document.getElementById("mapStatusText").textContent = "실시간 실측 데이터 모드";
+                        document.getElementById("mapStatusText").className = "text-emerald-400 font-semibold text-[11px] bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/30";
+                    }
+
+                    const daySuffix = parseInt(selectedDateStr.split("-")[2], 10);
+                    activeStations = JSON.parse(JSON.stringify(targetApiStations));
+                    activeStations.forEach(s => {
+                        const baseShift = Math.sin(daySuffix * 1.4);
+                        s.temp = Math.max(16.0, Math.min(25.5, s.temp + baseShift * 0.4));
+                        s.sal = Math.max(32.0, Math.min(34.5, s.sal + baseShift * 0.05));
+                        s.do = Math.max(5.8, Math.min(8.5, s.do - baseShift * 0.08));
+                        s.ph = Math.max(7.9, Math.min(8.3, s.ph + baseShift * 0.02));
+                    });
+
+                } else {
+                    isActualDataMode = false;
+
+                    const hb = document.getElementById("headerStatusBadge");
+                    if(hb) {
+                        hb.textContent = "AI 시계열 시나리오 예측";
+                        hb.className = "px-2 py-0.5 bg-purple-500/15 text-purple-400 text-[10px] font-bold rounded-md border border-purple-500/20";
+                    }
+
+                    const banner = document.getElementById("modeBanner");
+                    if(banner) {
+                        banner.className = "p-3 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-xl text-xs flex items-center gap-2 transition-all";
+                        banner.innerHTML = `<span class="text-sm">🔮</span> <span class="font-medium">실측 기록이 비어있는 날짜입니다. <b class="text-slate-200">AI 기후 및 계절 예측 시나리오 수치</b>를 대입하여 판정합니다.</span>`;
+                    }
+
+                    const badge = document.getElementById("metricTypeBadge");
+                    if(badge) {
+                        badge.textContent = "AI 예상 지표";
+                        badge.className = "text-purple-400 text-[10px] bg-purple-400/10 px-1.5 py-0.5 rounded border border-purple-500/20";
+                    }
+                    
+                    if(document.getElementById("lblTemp")) document.getElementById("lblTemp").textContent = "🌡️ 예상 수온";
+                    if(document.getElementById("lblSal")) document.getElementById("lblSal").textContent = "💧 예상 염분";
+                    if(document.getElementById("lblDO")) document.getElementById("lblDO").textContent = "🌬️ 예상 DO";
+                    if(document.getElementById("lblPH")) document.getElementById("lblPH").textContent = "🧪 예상 pH";
+
+                    if(document.getElementById("mapPulseDot")) document.getElementById("mapPulseDot").className = "w-2 h-2 rounded-full bg-purple-500 animate-ping";
+                    if(document.getElementById("mapStatusText")) {
+                        document.getElementById("mapStatusText").textContent = "AI 기후 시나리오 장기 예측 모드";
+                        document.getElementById("mapStatusText").className = "text-purple-400 font-semibold text-[11px] bg-purple-950/50 px-2 py-0.5 rounded border border-purple-800/30";
+                    }
+
+                    const parsedDate = new Date(selectedDateStr);
+                    const month = parsedDate.getMonth() + 1;
+                    
+                    let seasonalTempOffset = 0;
+                    if (month >= 6 && month <= 9) {
+                        seasonalTempOffset = 3.8;
+                    } else if (month >= 11 || month <= 2) {
+                        seasonalTempOffset = -4.2;
+                    } else {
+                        seasonalTempOffset = (month - 5) * 0.6;
+                    }
+
+                    activeStations = JSON.parse(JSON.stringify(targetApiStations));
+                    activeStations.forEach(s => {
+                        s.temp = Math.max(14.5, Math.min(27.0, s.temp + seasonalTempOffset + (Math.sin(s.lat * 50) * 0.3)));
+                        s.sal = Math.max(31.5, Math.min(34.8, s.sal - (seasonalTempOffset * 0.05)));
+                        s.do = Math.max(5.2, Math.min(8.8, s.do - (seasonalTempOffset * 0.1)));
+                        s.ph = Math.max(7.85, Math.min(8.35, s.ph - (Math.sin(s.lng * 50) * 0.01)));
+                    });
+                }
+
+                renderMarkers();
+                if (selectedStation) {
+                    const updated = activeStations.find(s => s.id === selectedStation.id);
+                    if (updated) selectStation(updated);
+                } else {
+                    selectStation(activeStations[0]);
+                }
+
+            }, 450);
+        }
+
+        // ==========================================
+        // 8. 커스텀 달력(Date Picker) 구현 엔진
+        // ==========================================
+        let calendarPopup, btnDatePicker, currentYearMonthText, calendarDaysGrid, selectedDateText, pickerArrow;
+
+        function initCalendarElements() {
+            calendarPopup = document.getElementById("calendarPopup");
+            btnDatePicker = document.getElementById("btnDatePicker");
+            currentYearMonthText = document.getElementById("currentYearMonthText");
+            calendarDaysGrid = document.getElementById("calendarDaysGrid");
+            selectedDateText = document.getElementById("selectedDateText");
+            pickerArrow = document.getElementById("pickerArrow");
+
+            // 요소가 정상적으로 준비되었을 때만 이벤트 위임 및 바인딩 시공 (에러 원천 방지)
+            if (btnDatePicker) {
+                btnDatePicker.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const isHidden = calendarPopup.classList.contains("hidden");
+                    if (isHidden) {
+                        calendarPopup.classList.remove("hidden");
+                        pickerArrow.classList.add("rotate-180");
+                        renderCalendar();
+                    } else {
+                        closeCalendar();
+                    }
+                });
+            }
+
+            document.addEventListener("click", (e) => {
+                if (calendarPopup && btnDatePicker && !calendarPopup.contains(e.target) && !btnDatePicker.contains(e.target)) {
+                    closeCalendar();
+                }
+            });
+
+            const prevBtn = document.getElementById("prevMonth");
+            if (prevBtn) {
+                prevBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
+                    renderCalendar();
+                });
+            }
+
+            const nextBtn = document.getElementById("nextMonth");
+            if (nextBtn) {
+                nextBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
+                    renderCalendar();
+                });
+            }
+        }
+
+        function closeCalendar() {
+            if (calendarPopup && pickerArrow) {
+                calendarPopup.classList.add("hidden");
+                pickerArrow.classList.remove("rotate-180");
+            }
+        }
+
+        function renderCalendar() {
+            if (!currentYearMonthText || !calendarDaysGrid) return;
+
+            const year = currentCalendarDate.getFullYear();
+            const month = currentCalendarDate.getMonth();
+
+            currentYearMonthText.textContent = `${year}년 ${month + 1}월`;
+
+            const firstDayIndex = new Date(year, month, 1).getDay();
+            const totalDays = new Date(year, month + 1, 0).getDate();
+            const prevTotalDays = new Date(year, month, 0).getDate();
+
+            calendarDaysGrid.innerHTML = "";
+
+            for (let i = firstDayIndex; i > 0; i--) {
+                const dayDiv = document.createElement("div");
+                dayDiv.className = "text-slate-700 py-1 cursor-default select-none";
+                dayDiv.textContent = prevTotalDays - i + 1;
+                calendarDaysGrid.appendChild(dayDiv);
+            }
+
+            for (let day = 1; day <= totalDays; day++) {
+                const dayDiv = document.createElement("div");
+                const checkDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                
+                const isSelected = (checkDateStr === selectedDateStr);
+                const isActualDate = actualDataDates.includes(checkDateStr);
+
+                let cellClass = "py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all relative flex flex-col items-center justify-center ";
+
+                if (isSelected) {
+                    cellClass += "bg-cyan-500 text-slate-950 font-bold shadow-lg shadow-cyan-500/20 ";
+                } else if (isActualDate) {
+                    cellClass += "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 ";
+                } else {
+                    cellClass += "text-slate-300 hover:bg-slate-800/80 ";
+                }
+
+                dayDiv.className = cellClass;
+                dayDiv.innerHTML = `
+                    <span>${day}</span>
+                    ${(isActualDate && !isSelected) ? '<span class="w-1 h-1 bg-emerald-400 rounded-full mt-0.5 animate-pulse"></span>' : ''}
+                    ${(!isActualDate && !isSelected) ? '<span class="w-1 h-1 bg-purple-600 rounded-full mt-0.5"></span>' : ''}
+                `;
+
+                dayDiv.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    selectedDateStr = checkDateStr;
+                    if (selectedDateText) selectedDateText.textContent = selectedDateStr;
+                    closeCalendar();
+                    handleFetchApi();
+                });
+
+                calendarDaysGrid.appendChild(dayDiv);
+            }
+        }
+
+        // ==========================================
+        // 9. 앱 초기화 구동
+        // ==========================================
+        window.onload = function() {
+            // Leaflet 맵 초기 구동 및 마커 장착
+            initMap();
+            
+            // 달력 동적 노출용 요소 바인딩 및 이벤트 할당
+            initCalendarElements();
+
+            // 기본 실측일인 2025-10-15를 기준으로 최초 데이터 연동 시작
+            handleFetchApi();
+
+            // 대시보드 내 해결책 마련 버튼 동작 바인딩
+            const solutionBtn = document.getElementById("btnShowSolution");
+            if (solutionBtn) {
+                solutionBtn.addEventListener("click", prepareSolution);
+            }
+
+            const fetchApiBtn = document.getElementById("btnFetchApi");
+            if (fetchApiBtn) {
+                fetchApiBtn.addEventListener("click", handleFetchApi);
+            }
+        }
+    </script>
+</body>
+</html>
